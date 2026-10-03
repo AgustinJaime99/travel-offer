@@ -260,6 +260,7 @@ Built after the MVP gates, each requested and approved explicitly; MVP phase sta
 | 2026-10-02 | Onboarding redesign (photo hero, stepper, 6-box code input) and optional Three.js backdrop (`NEXT_PUBLIC_ONBOARDING_3D=1`, off by default) | Decorative, `aria-hidden`, reduced-motion and no-WebGL fallbacks; flow, validations and API unchanged |
 | 2026-10-02 | Staff analytics dashboard (`GET /api/admin/dashboard/analytics`) and admin UI restyle | Aggregates only, no personal data; see ARCHITECTURE.md route table |
 | 2026-10-03 | Per-group services divided among passengers (formula `french-tna12-v2`) | Divisor set per proposal and frozen at publication; shares rounded up to the centavo; families see only their share. DOMAIN.md → Per-group lines |
+| 2026-10-03 | Installment tiers 3/6/12/18/24 offered up to the chosen maximum, payment-option carousel and "Me interesa" plan preference (`PUT /public/enrollments/:id/preference`) | Same down payment and TNA per option; tiers below the minimum installment are left out; preference is interest only, staff see counts. DOMAIN.md → Installment tiers |
 
 ## Post-MVP roadmap (not authorization to build)
 

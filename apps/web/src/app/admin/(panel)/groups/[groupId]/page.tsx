@@ -1,4 +1,9 @@
-import { canEditCatalog, proposalListSchema, provinceLabels } from '@travel-rock/shared';
+import {
+  canEditCatalog,
+  groupPlanPreferencesSchema,
+  proposalListSchema,
+  provinceLabels,
+} from '@travel-rock/shared';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PatchButton } from '@/components/patch-button';
@@ -15,11 +20,16 @@ export const metadata: Metadata = { title: 'Grupo · Travel Rock' };
 
 export default async function GroupPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = await params;
-  const [group, staff, proposals] = await Promise.all([
+  const [group, staff, proposals, preferences] = await Promise.all([
     loadGroup(groupId),
     getCurrentStaff(),
     serverApiGet(`/api/admin/proposals?schoolGroupId=${groupId}&pageSize=100`, proposalListSchema),
+    serverApiGet(
+      `/api/admin/school-groups/${groupId}/plan-preferences`,
+      groupPlanPreferencesSchema,
+    ),
   ]);
+  const interested = preferences?.options.reduce((sum, option) => sum + option.families, 0) ?? 0;
   const versions = [...(proposals?.items ?? [])].sort((a, b) => b.version - a.version);
   const draft = versions.find((proposal) => proposal.status === 'DRAFT');
   const canEdit = staff ? canEditCatalog(staff.role) : false;
@@ -113,6 +123,48 @@ export default async function GroupPage({ params }: { params: Promise<{ groupId:
           <p>Este grupo todavía no tiene propuestas.</p>
         )}
       </section>
+
+      {preferences?.proposal ? (
+        <section
+          aria-labelledby="preferences-title"
+          className="flex max-w-2xl flex-col gap-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200/70"
+        >
+          <div>
+            <h2 id="preferences-title" className="text-lg font-semibold text-slate-900">
+              Cómo prefieren pagar las familias
+            </h2>
+            <p className="text-sm text-slate-600">
+              Versión {preferences.proposal.version} publicada · {interested} de{' '}
+              {preferences.enrollments} {preferences.enrollments === 1 ? 'familia' : 'familias'}{' '}
+              eligieron una opción. Es interés, no una aceptación.
+            </p>
+          </div>
+          {preferences.options.length === 0 ? (
+            <p className="text-sm text-slate-500">Todavía nadie eligió una opción.</p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {preferences.options.map((option) => (
+                <li key={option.installments} className="flex flex-col gap-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-700">
+                      {option.installments === 0 ? 'Contado' : `${option.installments} cuotas`}
+                    </span>
+                    <span className="font-semibold text-slate-900 tabular-nums">
+                      {option.families}
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-r-[4px] bg-slate-100">
+                    <div
+                      className="h-full rounded-r-[4px] bg-[#eb6834]"
+                      style={{ width: `${(option.families / Math.max(interested, 1)) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </section>
   );
 }

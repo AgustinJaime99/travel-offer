@@ -55,7 +55,7 @@ test('a group cost is divided among the passengers and shown per student', async
       await expect(page.getByRole('button', { name: `Quitar ${name}` })).toBeVisible();
     }
     await expect(page.getByLabel('Pasajeros para dividir los costos del grupo')).toHaveValue('30');
-    await page.getByLabel('Cantidad de cuotas').selectOption('5');
+    await page.getByLabel('Cantidad de cuotas').selectOption('6');
     await page.getByLabel('TNA (%)').fill('0');
     await page.getByLabel('Válida hasta').fill(VALID_UNTIL);
     // Shares come from the server preview, once the plan is complete.

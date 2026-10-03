@@ -9,6 +9,10 @@ export interface PlanSlide {
   node: ReactNode;
 }
 
+/** Scroll position that centers a slide (slides are positioned relative to the track). */
+const centeredLeft = (container: HTMLElement, element: HTMLElement) =>
+  Math.max(element.offsetLeft - (container.clientWidth - element.offsetWidth) / 2, 0);
+
 const reducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -22,23 +26,86 @@ export function PlanCarousel({
   slides,
   label,
   initial = 0,
+  focusIndex,
 }: {
   slides: PlanSlide[];
   label: string;
   initial?: number;
+  /** Brings this slide into view when it changes (e.g. the option the user just chose). */
+  focusIndex?: number;
 }) {
   const id = useId();
   const track = useRef<HTMLDivElement>(null);
   const items = useRef<(HTMLDivElement | null)[]>([]);
   const [active, setActive] = useState(initial);
+  const activeRef = useRef(initial);
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
   const [scrollable, setScrollable] = useState(false);
 
-  // Start on the recommended card without animating.
+  // Start on the recommended card without animating. Widths settle after the first frame and
+  // once web fonts load, so it is re-applied then, unless the user has already moved it.
+  const touched = useRef(false);
+  const placeInitial = useRef<() => void>(() => {});
   useEffect(() => {
-    const element = items.current[initial];
     const container = track.current;
-    if (element && container) container.scrollLeft = element.offsetLeft - container.offsetLeft;
+    if (!container) return;
+    const place = () => {
+      const element = items.current[initial];
+      if (!element || touched.current) return;
+      container.scrollTo({ left: centeredLeft(container, element), behavior: 'instant' });
+    };
+    placeInitial.current = place;
+    // Layout changes (fonts, the controls appearing) re-place it while the user has not moved it.
+    const resize = new ResizeObserver(place);
+    resize.observe(container);
+    const markTouched = () => {
+      touched.current = true;
+    };
+    place();
+    const frame = requestAnimationFrame(place);
+    void document.fonts?.ready.then(place);
+    // Later font weights reflow the cards and Chrome moves the scroll without a scroll event:
+    // keep the initial card, or once the user moved it, the card they were looking at.
+    const restore = () => {
+      if (!touched.current) return place();
+      const element = items.current[activeRef.current];
+      if (element)
+        container.scrollTo({ left: centeredLeft(container, element), behavior: 'instant' });
+    };
+    document.fonts?.addEventListener('loadingdone', restore);
+    const events = ['pointerdown', 'wheel', 'keydown', 'touchstart'] as const;
+    for (const name of events) container.addEventListener(name, markTouched, { passive: true });
+    // Until the user moves it, any scroll is the browser adjusting the layout: put it back.
+    const keep = () => {
+      const element = items.current[initial];
+      if (!element || touched.current) return;
+      const left = centeredLeft(container, element);
+      if (
+        Math.abs(
+          container.scrollLeft - Math.min(left, container.scrollWidth - container.clientWidth),
+        ) > 2
+      )
+        place();
+    };
+    container.addEventListener('scroll', keep, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      resize.disconnect();
+      container.removeEventListener('scroll', keep);
+      document.fonts?.removeEventListener('loadingdone', restore);
+      for (const name of events) container.removeEventListener(name, markTouched);
+    };
   }, [initial]);
+
+  // When the carousel becomes scrollable the cards change size and Chrome re-snaps to the first
+  // one: place the initial card again after that render.
+  useEffect(() => {
+    if (!scrollable) return;
+    const frame = requestAnimationFrame(() => placeInitial.current());
+    return () => cancelAnimationFrame(frame);
+  }, [scrollable]);
 
   // The slide that is (mostly) in view is the active one; controls only when something is hidden.
   useEffect(() => {
@@ -77,15 +144,28 @@ export function PlanCarousel({
   }, [slides.length]);
 
   const go = (index: number) => {
+    touched.current = true;
     const target = Math.min(Math.max(index, 0), slides.length - 1);
     const element = items.current[target];
     const container = track.current;
     if (!element || !container) return;
     container.scrollTo({
-      left: element.offsetLeft - container.offsetLeft,
+      left: centeredLeft(container, element),
       behavior: reducedMotion() ? 'auto' : 'smooth',
     });
   };
+
+  const firstFocus = useRef(true);
+  useEffect(() => {
+    if (focusIndex === undefined) return;
+    // The initial position is set without animation above.
+    if (firstFocus.current) {
+      firstFocus.current = false;
+      return;
+    }
+    go(focusIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the requested slide changes
+  }, [focusIndex]);
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowRight') {
@@ -105,11 +185,12 @@ export function PlanCarousel({
       className="flex flex-col gap-4"
     >
       <div
+        // The ::before/::after spacers let the first and last cards be centered (and snapped).
         ref={track}
         id={id}
         tabIndex={scrollable ? 0 : -1}
         onKeyDown={onKey}
-        className="-mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-5 pt-4 pb-3 outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-orange-500 motion-reduce:scroll-auto lg:mx-0 lg:px-0 [&::-webkit-scrollbar]:hidden"
+        className={`relative -mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 [overflow-anchor:none] before:block before:w-[max(0px,calc(7%-1rem))] before:shrink-0 before:content-[''] after:block after:w-[max(0px,calc(7%-1rem))] after:shrink-0 after:content-[''] sm:before:w-[calc(18%-1rem)] sm:after:w-[calc(18%-1rem)] pt-4 pb-3 outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-orange-500 lg:mx-0 lg:px-0 [&::-webkit-scrollbar]:hidden`}
       >
         {slides.map((slide, index) => {
           const current = !scrollable || index === active;
@@ -123,7 +204,7 @@ export function PlanCarousel({
               role="group"
               aria-roledescription="opción"
               aria-label={`${index + 1} de ${slides.length}: ${slide.label}`}
-              className={`w-[86%] shrink-0 snap-center transition-[opacity,transform] duration-300 motion-reduce:transition-none sm:w-[70%] md:w-[calc(50%-0.5rem)] ${
+              className={`w-[86%] shrink-0 snap-center transition-[opacity,transform] duration-300 motion-reduce:transition-none sm:w-[64%] ${
                 current ? 'opacity-100' : 'scale-[0.96] opacity-60'
               }`}
             >

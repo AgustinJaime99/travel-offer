@@ -3,6 +3,7 @@
 import {
   bpsToPercentInput,
   formatArs,
+  installmentTiers,
   minorToArsInput,
   parseArsToMinor,
   parsePercentToBps,
@@ -55,7 +56,8 @@ interface BuilderState {
 
 type FieldErrors = Record<string, string>;
 
-const MAX_INSTALLMENTS = 36;
+/** Older drafts may keep a non-tier maximum until it is changed (the API asks for a tier). */
+const isTier = (value: string) => (installmentTiers as readonly number[]).includes(Number(value));
 
 function initialState(proposal: Proposal): BuilderState {
   const plan = proposal.paymentPlan;
@@ -142,6 +144,42 @@ function parseState(state: BuilderState) {
       validUntil: state.validUntil ? arDayToEndIso(state.validUntil) : null,
     },
   };
+}
+
+/** What families will be offered: cash plus every valid tier, and the tiers left out (and why). */
+function OfferOptions({ result }: { result: PricingResult }) {
+  if (result.installmentOptions.length === 0 && result.excludedInstallments.length === 0)
+    return null;
+  return (
+    <section
+      aria-labelledby="offer-options-title"
+      className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/70"
+    >
+      <h2 id="offer-options-title" className="text-sm font-semibold text-slate-900">
+        Opciones que ve la familia
+      </h2>
+      <ul className="flex flex-col gap-1.5 text-sm">
+        <li className="flex justify-between gap-3">
+          <span className="text-slate-600">Contado</span>
+          <span className="font-medium tabular-nums">{formatArs(result.cashPriceMinor)}</span>
+        </li>
+        {result.installmentOptions.map((option) => (
+          <li key={option.installments} className="flex justify-between gap-3">
+            <span className="text-slate-600">{option.installments} cuotas</span>
+            <span className="font-medium tabular-nums">
+              {formatArs(option.scheduleSummary[0]?.paymentMinor ?? '0')} / mes
+            </span>
+          </li>
+        ))}
+      </ul>
+      {result.excludedInstallments.length > 0 ? (
+        <p className="rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900 ring-1 ring-amber-600/25">
+          No se ofrecen {result.excludedInstallments.map((item) => item.installments).join(' ni ')}{' '}
+          cuotas: {result.excludedInstallments[0]?.message}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 function issuesToErrors(caught: unknown): FieldErrors | null {
@@ -611,7 +649,12 @@ export function ProposalBuilder({
                 />
               )}
             </Field>
-            <Field id="installments" label="Cantidad de cuotas" error={errorFor('installments')}>
+            <Field
+              id="installments"
+              label="Cantidad de cuotas"
+              error={errorFor('installments')}
+              hint="Máximo de cuotas: la familia ve contado y todas las opciones hasta este máximo."
+            >
               {(props) => (
                 <select
                   {...props}
@@ -619,14 +662,17 @@ export function ProposalBuilder({
                   onChange={(event) => update({ installments: event.target.value })}
                   className={inputClass}
                 >
-                  <option value="0">De contado (sin cuotas)</option>
-                  {Array.from({ length: MAX_INSTALLMENTS }, (_, index) => index + 1).map(
-                    (count) => (
-                      <option key={count} value={count}>
-                        {count} {count === 1 ? 'cuota' : 'cuotas'}
-                      </option>
-                    ),
-                  )}
+                  <option value="0">Solo contado (sin cuotas)</option>
+                  {installmentTiers.map((count, index) => (
+                    <option key={count} value={count}>
+                      Hasta {count} cuotas ({installmentTiers.slice(0, index + 1).join(', ')})
+                    </option>
+                  ))}
+                  {state.installments !== '0' && !isTier(state.installments) ? (
+                    <option value={state.installments}>
+                      {state.installments} cuotas (ya no se ofrece: elegí otra opción)
+                    </option>
+                  ) : null}
                 </select>
               )}
             </Field>
@@ -722,10 +768,13 @@ export function ProposalBuilder({
         className="flex flex-col gap-2 lg:sticky lg:top-4 lg:self-start"
       >
         {current?.result ? (
-          <PricingBreakdown
-            pricing={current.result}
-            title="Vista previa (calculada por el servidor)"
-          />
+          <>
+            <PricingBreakdown
+              pricing={current.result}
+              title="Vista previa (calculada por el servidor)"
+            />
+            <OfferOptions result={current.result} />
+          </>
         ) : current?.failed && !hasClientErrors ? (
           <div className="flex flex-col items-start gap-2 rounded-2xl border border-dashed border-slate-300 bg-white/60 text-slate-600 p-4">
             <p role="alert" className="text-sm text-red-700">

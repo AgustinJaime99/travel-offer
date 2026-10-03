@@ -70,6 +70,27 @@ test.describe('the family sees the group offer only with its access code', () =>
       page.getByRole('heading', { level: 1, name: 'Propuesta para 5° A' }),
     ).toBeVisible();
     await expectWorkedExample(page);
+
+    // Every tier up to the maximum (18) is offered; the family says which one it prefers.
+    for (const option of [
+      'Contado',
+      'En 3 cuotas',
+      'En 6 cuotas',
+      'En 12 cuotas',
+      'En 18 cuotas',
+    ]) {
+      await expect(page.getByRole('radio', { name: new RegExp(`^${option}:`) })).toBeAttached();
+    }
+    // The whole card is the radio's label: tapping it chooses the option.
+    await page.getByText('En 6 cuotas', { exact: true }).click();
+    await expect(page.getByRole('radio', { name: /^En 6 cuotas:/ })).toBeChecked();
+    await page.getByRole('button', { name: 'Me interesa en 6 cuotas' }).click();
+    await expect(page.getByRole('status')).toHaveText(
+      'Le avisamos a tu asesor que te interesa pagar en 6 cuotas.',
+    );
+    await page.reload();
+    await expect(page.getByRole('radio', { name: /^En 6 cuotas:/ })).toBeChecked();
+
     await page.getByRole('link', { name: '← Mis viajes' }).click();
     await expect(page.getByText('Propuesta disponible')).toBeVisible();
   });

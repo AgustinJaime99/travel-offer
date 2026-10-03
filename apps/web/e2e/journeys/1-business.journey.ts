@@ -109,9 +109,9 @@ test('A: from an empty catalog, staff publishes an offer and the family sees it 
     await family.getByRole('link', { name: 'Ver la propuesta' }).click();
     await heading(family, 'Propuesta para 5° A');
     await expect(family.getByText('Colegio Recorrido Andino')).toBeVisible();
-    // Each pricing card lists what is included.
-    const cashPlan = family.getByRole('article', { name: 'Pago de contado' });
-    for (const service of SERVICES) await expect(cashPlan.getByText(service.name)).toBeVisible();
+    // Every payment option includes the same services.
+    const includes = family.getByRole('region', { name: 'Tu viaje incluye' });
+    for (const service of SERVICES) await expect(includes.getByText(service.name)).toBeVisible();
     await expect(valueOf(family, 'Precio de contado')).toHaveText('$ 3.000.000,00');
     await expect(valueOf(family, 'Anticipo')).toHaveText('$ 600.000,00');
     await expect(valueOf(family, 'Monto financiado')).toHaveText('$ 2.400.000,00');

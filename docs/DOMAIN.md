@@ -144,6 +144,12 @@ Currency **ARS**. All amounts are integer **centavos** (`bigint`). Rates are int
 - **Families see only their share**: the public view sends per-group items as quantity 1 with the share as price and amount (`sharedCost: true`, labelled "costo compartido del grupo: tu parte") and never the group amount or `N`. Staff see both in the builder and in the published version.
 - v1 compatibility: per-passenger-only inputs give exactly the v1 amounts. Published v1 snapshots stay unchanged and readable (`formulaVersion` is the union `french-tna12-v1 | french-tna12-v2`; v2 adds `passengerCount` and per-line `perPassengerMinor`, which default to `null` and the line net for v1).
 
+### Installment tiers (owner, 2026-10-03)
+- Staff choose **contado (0) or a maximum among 3, 6, 12, 18, 24** installments; families are offered contado plus **every tier up to that maximum** ("if there are 24 there are also 18, 12, 6 and 3"). Other counts are rejected on save and publish (`installments`: "Elegí solo contado o hasta 3, 6, 12, 18 o 24 cuotas."). Drafts saved before keep their count until edited.
+- Every option uses the **same down payment and TNA**; each is calculated by the same engine (`calculateOffer`, one `calculatePricing` per tier) and frozen in the snapshot as `installmentOptions` (schedule, TEA/CFT, totals). The top-level snapshot fields describe the **largest valid option** (the proposal's `totalPayableMinor`).
+- A tier that breaks the minimum installment ($ 100.000,00) is **left out** and listed for staff in `excludedInstallments` (never sent to families); if not even the smallest tier is valid, the plan is rejected as before. Structural errors (limits, discounts, cash sale with installments…) are never turned into exclusions.
+- **Plan preference** (`PlanPreference`, one per enrollment): a family may say which option it is interested in ("Me interesa…", 0 = contado) for the version it is seeing. An expression of interest only — not an acceptance, reservation or commitment; it does not carry over to a new version. Staff (every role) see **counts per option** of the current publication on the group page, never who.
+
 ### Validation limits
 - Amounts: `0 ≤ amount ≤ 10^14` centavos each; quantity 1–999.
 - `0 ≤ lineDiscount ≤ lineGross`; `0 ≤ commercialDiscount ≤ subtotal`; `0 ≤ downPayment ≤ cashPrice`.

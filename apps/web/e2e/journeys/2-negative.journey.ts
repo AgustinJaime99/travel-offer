@@ -161,17 +161,14 @@ test('invalid pricing is rejected by the server and nothing is published', async
     await page.getByLabel('Anticipo (ARS)').fill('100.000');
   });
 
-  await test.step('installments below the $ 100.000,00 minimum', async () => {
-    // $ 900.000 financed at 30 % TNA: 12 installments are below the minimum, 10 is the maximum.
-    const minimum =
-      'Cada cuota tiene que ser de al menos $ 100.000,00: con este monto financiado, hasta 10 cuotas.';
-    await expect(page.getByText(minimum)).toBeVisible();
-    await publish(page);
-    await expect(page.getByText(minimum)).toBeVisible();
-    await page.getByLabel('Cantidad de cuotas').selectOption('8');
-    await expect(valueOf(page, 'Cuotas')).toHaveText(
-      '7 cuotas de $ 125.520,61 y 1 de $ 125.520,62',
-    );
+  await test.step('tiers below the $ 100.000,00 minimum are left out of the offer', async () => {
+    // $ 900.000 financed at 30 % TNA, up to 12 installments: 12 is below the minimum (10 at most),
+    // so families are offered contado, 3 and 6 installments (owner rule, 2026-10-03).
+    const options = page.getByRole('region', { name: 'Opciones que ve la familia' });
+    await expect(options.getByText('No se ofrecen 12 cuotas', { exact: false })).toBeVisible();
+    await expect(options.getByText('hasta 10 cuotas', { exact: false })).toBeVisible();
+    await expect(options.getByText('6 cuotas', { exact: true })).toBeVisible();
+    await expect(valueOf(page, 'Cantidad de cuotas')).toHaveText('6');
   });
 
   await test.step('a validity date that is not in the future', async () => {

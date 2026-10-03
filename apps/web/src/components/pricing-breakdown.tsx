@@ -1,6 +1,9 @@
 import { formatArs, formatBps, type PricingResult } from '@travel-rock/shared';
 
-type Pricing = Omit<PricingResult, 'lines' | 'passengerCount'>;
+type Pricing = Omit<
+  PricingResult,
+  'lines' | 'passengerCount' | 'installmentOptions' | 'excludedInstallments'
+>;
 
 /** "17 cuotas de $ 173.273,76 y 1 de $ 173.273,77": never a single rounded amount when they differ. */
 export function scheduleSummaryText(pricing: Pricing): string {
