@@ -42,6 +42,12 @@ const envSchema = z
       .string()
       .regex(/^\d{6}$/)
       .optional(),
+    // Development and test only: skip email delivery entirely (no SMTP server, e.g. a demo deploy).
+    // Requires OTP_FIXED_CODE so the code is still known. Rejected in production.
+    MAIL_DISABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
   })
   .refine(
     (env) =>
@@ -52,6 +58,14 @@ const envSchema = z
   .refine((env) => env.NODE_ENV !== 'production' || env.OTP_FIXED_CODE === undefined, {
     path: ['OTP_FIXED_CODE'],
     message: 'a fixed verification code is not allowed in production',
+  })
+  .refine((env) => !env.MAIL_DISABLED || env.NODE_ENV !== 'production', {
+    path: ['MAIL_DISABLED'],
+    message: 'disabling email delivery is not allowed in production',
+  })
+  .refine((env) => !env.MAIL_DISABLED || env.OTP_FIXED_CODE !== undefined, {
+    path: ['MAIL_DISABLED'],
+    message: 'disabling email delivery requires OTP_FIXED_CODE',
   });
 
 export type Env = z.infer<typeof envSchema>;

@@ -17,4 +17,7 @@ if (app.get<Env>(ENV).OTP_FIXED_CODE) {
   // Never the code itself: logs may be shared.
   console.warn('OTP_FIXED_CODE is set: every verification code is the fixed test code.');
 }
+if (app.get<Env>(ENV).MAIL_DISABLED) {
+  console.warn('MAIL_DISABLED is set: verification emails are not sent.');
+}
 await app.listen(app.get<Env>(ENV).API_PORT);

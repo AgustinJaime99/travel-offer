@@ -25,6 +25,8 @@ export class SmtpVerificationSender extends VerificationSender {
   }
 
   async sendCode(to: string, code: string): Promise<void> {
+    // MAIL_DISABLED implies OTP_FIXED_CODE (see env.ts): the code is known without the email.
+    if (this.env.MAIL_DISABLED) return;
     try {
       await this.transporter.sendMail({
         from: this.env.MAIL_FROM,

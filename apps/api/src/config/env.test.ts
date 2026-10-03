@@ -21,6 +21,7 @@ describe('parseEnv', () => {
       SMTP_SECURE: false,
       MAIL_FROM: 'Travel Rock <no-reply@travelrock.local>',
       OTP_RESEND_COOLDOWN_SECONDS: 60,
+      MAIL_DISABLED: false,
     });
   });
 
@@ -71,6 +72,23 @@ describe('parseEnv', () => {
         OTP_FIXED_CODE: '123456',
       }),
     ).toThrow(/^Invalid or missing environment variables: OTP_FIXED_CODE$/);
+  });
+
+  it('allows disabling email delivery outside production with a fixed code only', () => {
+    expect(
+      parseEnv({ ...valid, MAIL_DISABLED: 'true', OTP_FIXED_CODE: '123456' }).MAIL_DISABLED,
+    ).toBe(true);
+    expect(() => parseEnv({ ...valid, MAIL_DISABLED: 'true' })).toThrow(
+      /^Invalid or missing environment variables: MAIL_DISABLED$/,
+    );
+    expect(() =>
+      parseEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        AUTH_HMAC_SECRET: 'p'.repeat(32),
+        MAIL_DISABLED: 'true',
+      }),
+    ).toThrow(/MAIL_DISABLED/);
   });
 
   it('requires NODE_ENV explicitly', () => {
