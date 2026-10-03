@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.next-e2e/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+# Any env file may hold real secrets; only the documented local-only ones are versioned.
+.env*
+!.env.example
+!apps/api/.env.test
+apps/api/src/generated/

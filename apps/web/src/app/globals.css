@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/* Public family area (app/(public)/layout.tsx). */
+@layer components {
+  /*
+   * Phones: the header (with the photo) takes the height the card leaves free, at least 9.5rem
+   * (6.5rem on short screens); the photo also runs 1.5rem under the card's rounded top.
+   */
+  @media (width < 64rem) {
+    .public-hero-slot {
+      min-height: 9.5rem;
+    }
+  }
+  @media (height < 46rem) and (width < 64rem) {
+    .public-hero-slot {
+      min-height: 6.5rem;
+    }
+    .public-stepper-label {
+      display: none;
+    }
+  }
+  /*
+   * Trip photos: public/onboarding/hero-mobile.jpg (portrait, phones) and hero-desktop.jpg
+   * (landscape, ≥ 64rem). A missing file falls back to the sunset gradient underneath.
+   */
+  .public-hero-photo {
+    background-color: #f4a46b;
+    background-image:
+      url('/onboarding/hero-mobile.jpg'),
+      linear-gradient(180deg, #7aa0d6 0%, #f3b886 48%, #f28a4c 62%, #2f6d86 63%, #1d4f63 100%);
+    background-size: cover;
+    /* Phones: the band shows the bus, the signposts and the coast (lower middle of the portrait). */
+    background-position: center 55%;
+  }
+  @media (width >= 64rem) {
+    .public-hero-photo {
+      background-image:
+        url('/onboarding/hero-desktop.jpg'),
+        linear-gradient(180deg, #7aa0d6 0%, #f3b886 48%, #f28a4c 62%, #2f6d86 63%, #1d4f63 100%);
+      /* Desktop: keep the bus and luggage on the left, clear of the form card. */
+      background-position: left center;
+    }
+  }
+}
+
+/*
+ * Form controls of the public area: unlayered so they win over the utility classes of the shared
+ * form components, which keep their neutral look in the staff panel.
+ */
+.public-theme :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  border-radius: 0.75rem;
+  border-color: var(--color-slate-200);
+  background-color: white;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+}
+.public-theme :is(input, select, textarea):focus-visible {
+  border-color: var(--color-orange-500);
+  outline: none;
+  box-shadow: 0 0 0 4px var(--color-orange-100);
+}
+.public-theme :is(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--color-red-600);
+}
+.public-theme :is([type='checkbox'], [type='radio']) {
+  accent-color: var(--color-orange-600);
+}

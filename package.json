@@ -1,0 +1,36 @@
+{
+  "name": "travel-rock-platform",
+  "private": true,
+  "packageManager": "pnpm@10.18.0",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @travel-rock/shared build && pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter @travel-rock/shared build && pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm --filter @travel-rock/shared build && pnpm -r test",
+    "test:e2e": "pnpm --filter @travel-rock/shared build && pnpm --filter @travel-rock/api build && pnpm db:test:migrate && pnpm --filter @travel-rock/web test:e2e && pnpm --filter @travel-rock/web test:e2e:journeys",
+    "test:e2e:journeys": "pnpm --filter @travel-rock/shared build && pnpm --filter @travel-rock/api build && pnpm db:test:migrate && pnpm --filter @travel-rock/web test:e2e:journeys",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @travel-rock/api db:migrate",
+    "db:migrate:deploy": "pnpm --filter @travel-rock/api db:migrate:deploy",
+    "db:test:migrate": "pnpm --filter @travel-rock/api db:test:migrate",
+    "staff:create-admin": "pnpm --filter @travel-rock/shared build && pnpm --filter @travel-rock/api build && pnpm --filter @travel-rock/api staff:create-admin",
+    "demo:seed": "pnpm --filter @travel-rock/shared build && pnpm --filter @travel-rock/api build && pnpm --filter @travel-rock/api demo:seed",
+    "db:drift-check": "pnpm --filter @travel-rock/api db:drift-check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "^16.4.0",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

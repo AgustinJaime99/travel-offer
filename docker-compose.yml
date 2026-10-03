@@ -1,0 +1,45 @@
+# Local development infrastructure only. Credentials are for local use, never production.
+services:
+  postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: travelrock
+      POSTGRES_PASSWORD: travelrock
+      POSTGRES_DB: travelrock
+    ports:
+      - '127.0.0.1:${POSTGRES_DEV_PORT:-5440}:5432'
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U travelrock -d travelrock']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  postgres-test:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: travelrock
+      POSTGRES_PASSWORD: travelrock
+      POSTGRES_DB: travelrock_test
+    ports:
+      - '127.0.0.1:${POSTGRES_TEST_PORT:-5441}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U travelrock -d travelrock_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    environment:
+      # Reverse DNS of each SMTP client stalled the greeting ~5 s after idle periods (Phase 10).
+      MP_SMTP_DISABLE_RDNS: 'true'
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+
+volumes:
+  postgres-dev-data:

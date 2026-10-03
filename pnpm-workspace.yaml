@@ -1,0 +1,16 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Dependencies allowed to run install scripts (pnpm blocks them by default).
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - '@swc/core'
+  - prisma
+  - unrs-resolver
+
+# Security patches for transitive dependencies of the Prisma CLI/config (pnpm audit, Phase 14).
+# Neither is used at runtime with PostgreSQL; remove once Prisma ships patched versions.
+overrides:
+  mysql2: ^3.24.5
+  deepmerge-ts: ^8.0.2

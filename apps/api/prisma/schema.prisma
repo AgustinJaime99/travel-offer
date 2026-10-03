@@ -1,0 +1,394 @@
+// Models are added phase by phase following the approved proposal in docs/ARCHITECTURE.md.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  runtime             = "nodejs"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum StaffRole {
+  ADMIN
+  COMMERCIAL
+  VIEWER
+}
+
+model StaffUser {
+  id                 String               @id @default(uuid(7)) @db.Uuid
+  email              String               @unique // normalized: trimmed, lowercase
+  fullName           String
+  passwordHash       String
+  role               StaffRole
+  active             Boolean              @default(true)
+  mustChangePassword Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  sessions           StaffSession[]
+  createdProposals   CommercialProposal[] @relation("ProposalCreatedBy")
+  resolvedRequests   SchoolRequest[]
+  publishedProposals CommercialProposal[] @relation("ProposalPublishedBy")
+}
+
+model StaffSession {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique // HMAC-SHA256 of the opaque cookie token
+  staffUserId String    @db.Uuid
+  staffUser   StaffUser @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime // absolute expiry
+
+  @@index([staffUserId])
+}
+
+enum Province {
+  BUENOS_AIRES
+  CABA
+  CATAMARCA
+  CHACO
+  CHUBUT
+  CORDOBA
+  CORRIENTES
+  ENTRE_RIOS
+  FORMOSA
+  JUJUY
+  LA_PAMPA
+  LA_RIOJA
+  MENDOZA
+  MISIONES
+  NEUQUEN
+  RIO_NEGRO
+  SALTA
+  SAN_JUAN
+  SAN_LUIS
+  SANTA_CRUZ
+  SANTA_FE
+  SANTIAGO_DEL_ESTERO
+  TIERRA_DEL_FUEGO
+  TUCUMAN
+}
+
+// No unique constraint on name/city (B10): same-named campuses may coexist; staff get a soft warning.
+model School {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  name           String
+  normalizedName String // normalizeText(name)
+  province       Province
+  city           String
+  normalizedCity String // normalizeText(city)
+  address        String?
+  cue            String?         @unique // digits only: 7, or 9 with annex
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  groups         SchoolGroup[]
+  requests       SchoolRequest[]
+
+  @@index([province, normalizedCity])
+  // Trigram indexes: accent-insensitive, typo-tolerant search (ADR-10). Declared here, not only in SQL,
+  // so Prisma does not treat them as drift and generate DROP INDEX.
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "School_normalizedName_trgm_idx")
+  @@index([normalizedCity(ops: raw("gin_trgm_ops"))], type: Gin, map: "School_normalizedCity_trgm_idx")
+}
+
+enum SchoolGroupStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// One commercial cohort of one school (B9). The school never changes after creation.
+model SchoolGroup {
+  id                  String               @id @default(uuid(7)) @db.Uuid
+  schoolId            String               @db.Uuid
+  school              School               @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  name                String
+  normalizedName      String // normalizeText(name)
+  travelYear          Int // calendar year of the trip
+  estimatedStudents   Int? // informational, never a pricing multiplier (B1)
+  status              SchoolGroupStatus    @default(ACTIVE)
+  accessCodeHash      String? // argon2id of the normalized code; plaintext shown once (B7)
+  accessCodeRotatedAt DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  proposals           CommercialProposal[]
+  enrollments         Enrollment[]
+
+  @@unique([schoolId, normalizedName, travelYear])
+  @@index([travelYear, status])
+}
+
+enum ServiceCategory {
+  TRANSPORT
+  LODGING
+  MEALS
+  EXCURSIONS
+  INSURANCE
+  OTHER
+}
+
+enum PricingUnit {
+  PER_PASSENGER
+  PER_GROUP // whole-group price, divided among the proposal's passenger count (2026-10-03)
+}
+
+// Catalog entry. basePriceMinor is the default for new proposal items, never a historical quote.
+model Service {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  name           String
+  normalizedName String          @unique // normalizeText(name): one service per name (Phase 5 default)
+  description    String?
+  category       ServiceCategory
+  pricingUnit    PricingUnit     @default(PER_PASSENGER)
+  basePriceMinor BigInt // ARS centavos
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  proposalItems  ProposalItem[]
+
+  @@index([active, category])
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Service_normalizedName_trgm_idx")
+}
+
+enum ProposalStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// One version of a group's offer (T4/ADR-05). PUBLISHED and ARCHIVED rows are immutable (DB triggers);
+// at most one PUBLISHED and one DRAFT per group (partial unique indexes, hand-written SQL).
+model CommercialProposal {
+  id                String               @id @default(uuid(7)) @db.Uuid
+  schoolGroupId     String               @db.Uuid
+  schoolGroup       SchoolGroup          @relation(fields: [schoolGroupId], references: [id], onDelete: Restrict)
+  version           Int
+  status            ProposalStatus       @default(DRAFT)
+  clonedFromId      String?              @db.Uuid
+  clonedFrom        CommercialProposal?  @relation("ProposalClone", fields: [clonedFromId], references: [id], onDelete: Restrict)
+  clones            CommercialProposal[] @relation("ProposalClone")
+  validFrom         DateTime?
+  validUntil        DateTime? // required to publish (B12)
+  createdById       String               @db.Uuid
+  createdBy         StaffUser            @relation("ProposalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedById     String?              @db.Uuid
+  publishedBy       StaffUser?           @relation("ProposalPublishedBy", fields: [publishedById], references: [id], onDelete: Restrict)
+  publishedAt       DateTime?
+  archivedAt        DateTime?
+  cashPriceMinor    BigInt // summary of the stored pricing snapshot
+  totalPayableMinor BigInt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  items             ProposalItem[]
+  paymentPlan       PaymentPlan?
+  views             ProposalView[]
+  planPreferences   PlanPreference[]
+
+  @@unique([schoolGroupId, version])
+  @@index([status])
+}
+
+// Frozen selection of a service: name, category, unit and prices are snapshots, never read from the catalog.
+model ProposalItem {
+  id                      String             @id @default(uuid(7)) @db.Uuid
+  proposalId              String             @db.Uuid
+  proposal                CommercialProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  serviceId               String             @db.Uuid
+  service                 Service            @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  position                Int
+  serviceNameSnapshot     String
+  serviceCategorySnapshot ServiceCategory
+  pricingUnitSnapshot     PricingUnit
+  catalogUnitPriceMinor   BigInt // catalog price when the service was added
+  unitPriceMinor          BigInt // applied price (may override the catalog, B6)
+  quantity                Int
+  discountMinor           BigInt             @default(0)
+
+  @@unique([proposalId, position])
+  @@unique([proposalId, serviceId])
+}
+
+// Financing inputs of a version and the server-calculated snapshot (frozen at publication).
+model PaymentPlan {
+  id                      String             @id @default(uuid(7)) @db.Uuid
+  proposalId              String             @unique @db.Uuid
+  proposal                CommercialProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  commercialDiscountMinor BigInt             @default(0)
+  downPaymentMinor        BigInt             @default(0)
+  installments            Int                @default(0)
+  tnaBps                  Int                @default(0)
+  passengerCount          Int? // divisor of per-group services; required by pricing when there are any
+  pricingSnapshot         Json // pricing result + item snapshots, money as centavo strings
+}
+
+enum ContactType {
+  EMAIL
+  PHONE // modeled; enabled once an SMS/WhatsApp provider is approved (F-e)
+}
+
+enum Relationship {
+  GUARDIAN
+  ADULT_STUDENT
+}
+
+enum EnrollmentStatus {
+  SUBMITTED
+  WITHDRAWN
+}
+
+// Public user: the responsible adult (B8). Identified by this id, never by email or phone (T1).
+model Applicant {
+  id                   String             @id @default(uuid(7)) @db.Uuid
+  fullName             String
+  privacyNoticeVersion String
+  privacyAcceptedAt    DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  contacts             ApplicantContact[]
+  sessions             ApplicantSession[]
+  enrollments          Enrollment[]
+  requests             SchoolRequest[]
+}
+
+// Only verified contacts are stored; a pending one lives in its OtpChallenge until verified.
+// A verified value belongs to one applicant (partial unique index, hand-written SQL).
+model ApplicantContact {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  applicantId     String      @db.Uuid
+  applicant       Applicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  type            ContactType
+  valueNormalized String
+  verifiedAt      DateTime?
+  createdAt       DateTime    @default(now())
+
+  @@index([applicantId])
+  @@index([type, valueNormalized])
+}
+
+// One-time code sent to a contact. Not linked to an applicant until verified (sign-up), or linked
+// to the applicant who is adding a contact.
+model OtpChallenge {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  type            ContactType
+  valueNormalized String
+  applicantId     String?     @db.Uuid
+  codeHash        String // HMAC-SHA256(secret, challengeId:code)
+  attempts        Int         @default(0)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  createdAt       DateTime    @default(now())
+
+  @@index([expiresAt]) // purge of expired challenges (maintenance/expired-data.purger.ts)
+}
+
+model ApplicantSession {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique
+  applicantId String    @db.Uuid
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+
+  @@index([applicantId])
+}
+
+// Expression of interest of one adult, for one student, in one group. No contract or payment.
+model Enrollment {
+  id                    String           @id @default(uuid(7)) @db.Uuid
+  applicantId           String           @db.Uuid
+  applicant             Applicant        @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  schoolGroupId         String           @db.Uuid
+  schoolGroup           SchoolGroup      @relation(fields: [schoolGroupId], references: [id], onDelete: Restrict)
+  studentFirstName      String
+  studentLastName       String
+  studentNormalizedName String
+  relationship          Relationship
+  consentTextVersion    String
+  consentedAt           DateTime
+  accessGrantedAt       DateTime? // set by a valid group access code (Phase 10)
+  idempotencyKey        String           @unique @db.Uuid
+  status                EnrollmentStatus @default(SUBMITTED)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  views                 ProposalView[]
+  planPreference        PlanPreference?
+
+  @@unique([applicantId, schoolGroupId, studentNormalizedName])
+  @@index([schoolGroupId, status])
+}
+
+// Which published versions each enrollment was shown (DOMAIN.md: the public view always shows the
+// group's current eligible publication; this keeps the history).
+/**
+ * The payment option a family is interested in (0 = contado) for a given published version. An
+ * expression of interest only: never an acceptance or a commitment (2026-10-03).
+ */
+model PlanPreference {
+  enrollmentId String             @id @db.Uuid
+  enrollment   Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  proposalId   String             @db.Uuid
+  proposal     CommercialProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  installments Int
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([proposalId])
+}
+
+model ProposalView {
+  enrollmentId  String             @db.Uuid
+  enrollment    Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  proposalId    String             @db.Uuid
+  proposal      CommercialProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+  firstViewedAt DateTime           @default(now())
+
+  @@id([enrollmentId, proposalId])
+}
+
+enum RequestType {
+  SCHOOL_NOT_FOUND
+  GROUP_NOT_FOUND
+}
+
+enum RequestStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+// A family reports a missing school or group (B11). Never creates a School/SchoolGroup by itself.
+// For GROUP_NOT_FOUND the school fields are a snapshot of the existing school.
+model SchoolRequest {
+  id                   String        @id @default(uuid(7)) @db.Uuid
+  type                 RequestType
+  applicantId          String        @db.Uuid
+  applicant            Applicant     @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  schoolId             String?       @db.Uuid
+  school               School?       @relation(fields: [schoolId], references: [id], onDelete: Restrict)
+  schoolName           String
+  normalizedSchoolName String        @default("") // normalizeText(schoolName): accent-insensitive staff search
+  province             Province
+  city                 String
+  course               String
+  travelYear           Int
+  status               RequestStatus @default(PENDING)
+  // Same family + same request while open (hand-written partial unique index): repeats are no-ops.
+  dedupKey             String
+  // Groups demand for one school across families: schoolId, or normalized name + province + city.
+  demandKey            String
+  staffNotes           String?
+  resolvedById         String?       @db.Uuid
+  resolvedBy           StaffUser?    @relation(fields: [resolvedById], references: [id], onDelete: Restrict)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([type, status, createdAt])
+  @@index([status, createdAt])
+  @@index([demandKey, status])
+}

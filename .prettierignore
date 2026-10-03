@@ -1,0 +1,11 @@
+pnpm-lock.yaml
+dist/
+.next/
+.next-e2e/
+coverage/
+playwright-report/
+test-results/
+apps/api/src/generated/
+apps/api/prisma/migrations/
+# Hand-maintained documentation
+*.md
