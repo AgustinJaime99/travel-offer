@@ -1,4 +1,4 @@
-# Travel Rock Commercial Platform
+# T Company Commercial Platform
 
 MVP for Travel Rock staff to manage schools, school groups, services and priced commercial proposals, and for families to find their group's published proposal through onboarding.
 
